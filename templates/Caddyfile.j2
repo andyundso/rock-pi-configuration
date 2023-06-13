@@ -1,0 +1,7 @@
+http://pihole.home.arpa {
+    reverse_proxy pihole:80
+}
+
+http://netdata.home.arpa {
+    reverse_proxy host.docker.internal:19999
+}

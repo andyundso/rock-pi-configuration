@@ -1,0 +1,144 @@
+- hosts: all
+
+  pre_tasks:
+    # normally, geerlingguy.pip would already do this
+    # but since we want to install pip packages as non-root
+    # we need to install pip beforehand as root
+    - name: Install required packages
+      apt:
+        cache_valid_time: 3600
+        pkg: python3-pip
+        update_cache: yes
+      become: yes
+
+  roles:
+    - name: geerlingguy.pip
+      pip_install_packages:
+        - docker
+        - docker-compose
+
+    - name: geerlingguy.docker
+      become: yes
+      docker_users: "{{ ansible_user }}"
+
+    - name: simplificator.netdata_installation
+      become: yes
+
+  tasks:
+    - name: Copy netdata.conf
+      template:
+        src: netdata.conf.j2
+        dest: /etc/netdata/netdata.conf
+        owner: netdata
+        group: netdata
+        mode: 0600
+      notify:
+        - Restart Netdata
+      become: true
+
+    - name: Copy pihole.conf
+      template:
+        src: pihole.conf.j2
+        dest: /etc/netdata/go.d/pihole.conf
+        owner: netdata
+        group: netdata
+        mode: 0600
+      notify:
+        - Restart Netdata
+      become: true
+
+    - name: Stop and disable systemd-resolved
+      service:
+        enabled: false
+        name: systemd-resolved
+        state: stopped
+      become: yes
+
+    - name: Switch to default DNS resolution
+      lineinfile:
+        path: "/etc/NetworkManager/NetworkManager.conf"
+        insertafter: '[main]'
+        line: "dns=default"
+        state: present
+      register: network_manager_conf_changed
+      become: yes
+
+    - name: Remove resolv.conf
+      file:
+        dest: "/etc/resolv.conf"
+        state: absent
+      when: network_manager_conf_changed.changed
+      become: yes
+
+    - name: Restart network manager if needed
+      service:
+        name: "NetworkManager"
+        state: "restarted"
+      when: network_manager_conf_changed.changed
+      become: yes
+
+    - name: Create folder for Caddy configuration
+      file:
+        path: "/opt/caddy"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "775"
+        state: directory
+      become: yes
+
+    - name: Copy Caddyfile
+      template:
+        src: "Caddyfile.j2"
+        dest: "/opt/caddy/Caddyfile"
+
+    - name: Create folder for Pihole configuration
+      file:
+        path: "{{ item }}"
+        owner: "root"
+        group: "root"
+        mode: "777" # Pihole uses some obscure users internally
+        state: directory
+      become: yes
+      with_items:
+        - "/opt/pihole"
+        - "/opt/pihole/pihole"
+        - "/opt/pihole/dnsmasqd"
+
+    - name: Copy custom DNS configuration
+      template:
+        src: "03-pihole-custom-dns.conf.j2"
+        dest: "/opt/pihole/dnsmasqd/03-pihole-custom-dns.conf"
+      become: yes
+
+    - name: Run Pi hole using docker compose
+      community.docker.docker_compose:
+        project_name: pihole
+        pull: yes
+        definition:
+          version: "3"
+          services:
+            caddy:
+              image: caddy:2.6.4
+              ports:
+                - "80:80/tcp"
+              extra_hosts:
+                - "host.docker.internal:host-gateway"
+              volumes:
+                - /opt/caddy/Caddyfile:/etc/caddy/Caddyfile
+
+            pihole:
+              image: pihole/pihole:2023.03.1
+              ports:
+                - "53:53/tcp"
+                - "53:53/udp"
+                - "127.0.0.1:8080:80/tcp"
+              environment:
+                DNSMASQ_LISTENING: all
+                DNSMASQ_USER: root
+                FTLCONF_LOCAL_IPV4: "{{ ansible_host }}"
+                TZ: "Europe/Zurich"
+                WEBPASSWORD: "{{ pihole_web_password }}"
+              volumes:
+                - "/opt/pihole/pihole:/etc/pihole"
+                - "/opt/pihole/dnsmasqd:/etc/dnsmasq.d"
+              restart: unless-stopped
