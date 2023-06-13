@@ -119,6 +119,7 @@
           services:
             caddy:
               image: caddy:2.6.4
+              restart: unless-stopped
               ports:
                 - "80:80/tcp"
               extra_hosts:
@@ -128,6 +129,7 @@
 
             pihole:
               image: pihole/pihole:2023.03.1
+              restart: unless-stopped
               ports:
                 - "53:53/tcp"
                 - "53:53/udp"
@@ -141,4 +143,3 @@
               volumes:
                 - "/opt/pihole/pihole:/etc/pihole"
                 - "/opt/pihole/dnsmasqd:/etc/dnsmasq.d"
-              restart: unless-stopped
