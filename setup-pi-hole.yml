@@ -111,11 +111,10 @@
       become: yes
 
     - name: Run Pi hole using docker compose
-      community.docker.docker_compose:
+      community.docker.docker_compose_v2:
         project_name: pihole
-        pull: yes
+        pull: always
         definition:
-          version: "3"
           services:
             caddy:
               image: caddy:2.8.4
