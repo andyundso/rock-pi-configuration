@@ -1,6 +1,11 @@
 - hosts: all
 
   handlers:
+    - name: Restart Netdata
+      service:
+        name: netdata
+        state: restarted
+
     - name: Restart systemd-resolved
       service:
         name: systemd-resolved
@@ -25,12 +30,61 @@
 
     - name: geerlingguy.docker
       become: yes
-      docker_users: "{{ ansible_user }}"
-
-    - name: simplificator.netdata_installation
-      become: yes
 
   tasks:
+    - name: install pre-requisites
+      apt:
+        pkg:
+          - gnupg
+          - apt-transport-https
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+
+    - name: Install GPG Key from Netdata
+      apt_key:
+        url: "https://repo.netdata.cloud/netdatabot.gpg.key"
+        state: present
+      become: yes
+
+    - name: Add Netdata repository
+      template:
+        src: "netdata.list.j2"
+        dest: "/etc/apt/sources.list.d/netdata.list"
+        owner: "root"
+        group: "root"
+        mode: 644
+
+    - name: Install netdata
+      apt:
+        name:
+          - netdata
+          - netdata-plugin-network-viewer
+          - netdata-plugin-systemd-journal
+        update_cache: true
+      become: yes
+      notify:
+        - Restart Netdata
+
+    - name: Create cloud configuration directory
+      file:
+        path: /var/lib/netdata/cloud.d
+        state: "directory"
+        owner: "netdata"
+        group: "netdata"
+        mode: "0770"
+
+    - name: Copy cloud.conf
+      copy:
+        src: cloud.conf
+        dest: /var/lib/netdata/cloud.d/cloud.conf
+        owner: "netdata"
+        group: "netdata"
+        mode: "0770"
+      notify:
+        - "Restart Netdata"
+
     - name: Copy netdata.conf
       template:
         src: netdata.conf.j2
