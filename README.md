@@ -4,31 +4,19 @@ This repository contains information about how to configure my Rock Pi 4 to run 
 
 ## Manual setup
 
-Get the Ubuntu Server image from one of the community builds. I used [this release](https://github.com/radxa-build/rock-pi-4b/releases/tag/20221101-0235) at the time. I would have prefered Debian, but they all contained a GUI which I didn't want to manually remove.
+Get an Armbian minimal image. I used [this release](https://github.com/armbian/community/releases/download/25.5.0-trunk.4/Armbian_community_25.5.0-trunk.4_Rockpi-4bplus_bookworm_current_6.12.12_minimal.img.xz) at the time.
 
-Once flashed and booted, connect a monitor and keyboard. Default credentials are `rock` / `rock`.
-
-Get the key for the Radxa apt repository. It's preconfigured on the image, but the key included in the image is outdated.
+Once flashed and booted, connect it to a network cable. The device will fetch an IP using DHCP, so you might have to scan your network in order to find the IP:
 
 ```
-wget -O - https://apt.radxa.com/focal-stable/public.key | sudo apt-key add -
+nmap -sP 192.168.1.*
 ```
 
-Afterward, install `openssh-server` to work from your notebook to provision the rest.
+Once you found the device, you can login using SSH with username root and password `1234`.
 
-```
-sudo apt update && sudo apt install openssh-server
-```
+The device will then ask you to customize the root password. Choose whatever seems fit to you. You do not have to create a separate user account.
 
-Connect to the system via SSH and configure the authorised keys.
-
-```
-ssh rock@34.56.78.90
-mkdir .ssh
-echo "your public key" > .ssh/authorized_keys
-```
-
-Last, configure a static IP for the system. I used `sudo nmtui` for it. The user interface explains itself.
+Last, configure a static IP for the system. Run `armbian-config`, go to `Network`, choose `Basic Network Setup` and then customize the IP setup for eth0. Then, remove the "fallback DHCP" configuration in order to activate the static IP address.
 
 ## Ansible setup
 

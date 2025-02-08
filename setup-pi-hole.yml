@@ -1,5 +1,11 @@
 - hosts: all
 
+  handlers:
+    - name: Restart systemd-resolved
+      service:
+        name: systemd-resolved
+        state: restarted
+
   pre_tasks:
     # normally, geerlingguy.pip would already do this
     # but since we want to install pip packages as non-root
@@ -47,35 +53,15 @@
         - Restart Netdata
       become: true
 
-    - name: Stop and disable systemd-resolved
-      service:
-        enabled: false
-        name: systemd-resolved
-        state: stopped
-      become: yes
-
-    - name: Switch to default DNS resolution
+    - name: Adjust DNS resolution
       lineinfile:
-        path: "/etc/NetworkManager/NetworkManager.conf"
-        insertafter: '[main]'
-        line: "dns=default"
+        path: "/etc/systemd/resolved.conf"
+        regexp: "DNSStubListener="
+        line: "DNSStubListener=no"
         state: present
-      register: network_manager_conf_changed
       become: yes
-
-    - name: Remove resolv.conf
-      file:
-        dest: "/etc/resolv.conf"
-        state: absent
-      when: network_manager_conf_changed.changed
-      become: yes
-
-    - name: Restart network manager if needed
-      service:
-        name: "NetworkManager"
-        state: "restarted"
-      when: network_manager_conf_changed.changed
-      become: yes
+      notify:
+        - Restart systemd-resolved
 
     - name: Create folder for Caddy configuration
       file:
@@ -109,6 +95,9 @@
         src: "03-pihole-custom-dns.conf.j2"
         dest: "/opt/pihole/dnsmasqd/03-pihole-custom-dns.conf"
       become: yes
+
+    - name: Flush handlers
+      meta: flush_handlers
 
     - name: Run Pi hole using docker compose
       community.docker.docker_compose_v2:
